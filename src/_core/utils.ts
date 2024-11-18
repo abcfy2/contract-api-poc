@@ -3,8 +3,8 @@ import {ethers} from 'ethers';
 import {RouteShorthandOptions} from 'fastify';
 import fs from 'fs';
 import path from 'path';
-import {Controller} from './type';
 import {env} from '../env';
+import {Controller} from './type';
 
 export function generateFromAbi(abiPath: string): Controller[] {
   const ctls = [] as Controller[];
@@ -56,6 +56,14 @@ export function generateFromAbi(abiPath: string): Controller[] {
                 type: 'object',
                 properties: schemaProperties,
               };
+              options.schema.headers = {
+                type: 'object',
+                properties: {
+                  'x-wallet-signature': {type: 'string'},
+                  'x-wallet-address': {type: 'string'},
+                },
+                required: ['x-wallet-signature'],
+              };
             }
           }
           ctl.actions.push({
@@ -65,11 +73,19 @@ export function generateFromAbi(abiPath: string): Controller[] {
             handler: async (request, reply) => {
               const queryParams =
                 request.method === 'GET' ? request.query : request.body;
+              const signature: string = request.headers[
+                'X-Wallet-Signature'
+              ] as string;
               const args = convertQueryParamsToContractArgs(
                 inputParams,
                 queryParams
               );
-              const result = await contract[func.name](...args);
+              let result;
+              if (signature) {
+                result = await provider.sendTransaction(signature);
+              } else {
+                result = await contract[func.name](...args);
+              }
               return reply.code(200).send(result);
             },
           });
